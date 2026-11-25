@@ -1,4 +1,4 @@
-Build Clock APK
+name:Build Clock APK
 
 on:
   workflow_dispatch:
