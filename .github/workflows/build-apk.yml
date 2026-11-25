@@ -1,4 +1,4 @@
-me: Build Clock APK
+Build Clock APK
 
 on:
   workflow_dispatch:
