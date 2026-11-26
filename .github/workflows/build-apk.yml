@@ -1,4 +1,4 @@
-name: Build Clock APK - 5 Clock Faces
+name: Build Premium Clock APK
 
 on:
   workflow_dispatch:
@@ -9,7 +9,6 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,301 +30,14 @@ jobs:
           mkdir -p extracted
           unzip -o ClockApp_Full_Project.zip -d extracted
 
-      - name: Add 5 clock faces
+      - name: Add JVM 17 compatibility
         working-directory: extracted/ClockApp_Full
         shell: bash
         run: |
-          set -e
-          cat > app/src/main/java/com/example/MainActivity.kt <<'KOTLIN'
-          package com.example
-
-          import android.os.Bundle
-          import androidx.activity.ComponentActivity
-          import androidx.activity.compose.setContent
-          import androidx.compose.foundation.Canvas
-          import androidx.compose.foundation.background
-          import androidx.compose.foundation.border
-          import androidx.compose.foundation.clickable
-          import androidx.compose.foundation.layout.*
-          import androidx.compose.foundation.lazy.LazyRow
-          import androidx.compose.foundation.lazy.items
-          import androidx.compose.foundation.shape.CircleShape
-          import androidx.compose.foundation.shape.RoundedCornerShape
-          import androidx.compose.material3.*
-          import androidx.compose.runtime.*
-          import androidx.compose.ui.Alignment
-          import androidx.compose.ui.Modifier
-          import androidx.compose.ui.draw.clip
-          import androidx.compose.ui.geometry.Offset
-          import androidx.compose.ui.graphics.Color
-          import androidx.compose.ui.graphics.StrokeCap
-          import androidx.compose.ui.graphics.drawscope.Stroke
-          import androidx.compose.ui.text.font.FontWeight
-          import androidx.compose.ui.unit.dp
-          import androidx.compose.ui.unit.sp
-          import kotlinx.coroutines.delay
-          import java.text.SimpleDateFormat
-          import java.util.Date
-          import java.util.Locale
-          import kotlin.math.cos
-          import kotlin.math.sin
-
-          data class Face(val id: Int, val name: String)
-
-          class MainActivity : ComponentActivity() {
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
-                  setContent { ClockFacesApp() }
-              }
-          }
-
-          @Composable
-          fun ClockFacesApp() {
-              val context = androidx.compose.ui.platform.LocalContext.current
-              val prefs = remember { context.getSharedPreferences("clock_faces", 0) }
-
-              val faces = remember {
-                  listOf(
-                      Face(0, "Classic"),
-                      Face(1, "Minimal"),
-                      Face(2, "Digital"),
-                      Face(3, "Neon"),
-                      Face(4, "Bold")
-                  )
-              }
-
-              var selected by remember { mutableIntStateOf(prefs.getInt("face", 0)) }
-              var now by remember { mutableStateOf(Date()) }
-
-              LaunchedEffect(Unit) {
-                  while (true) {
-                      now = Date()
-                      delay(1000)
-                  }
-              }
-
-              val time = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(now)
-              val date = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()).format(now)
-
-              Surface(
-                  modifier = Modifier.fillMaxSize(),
-                  color = Color(0xFF101114)
-              ) {
-                  Column(
-                      modifier = Modifier
-                          .fillMaxSize()
-                          .padding(20.dp),
-                      horizontalAlignment = Alignment.CenterHorizontally
-                  ) {
-                      Text(
-                          "Clock",
-                          color = Color.White,
-                          fontSize = 28.sp,
-                          fontWeight = FontWeight.Bold
-                      )
-
-                      Text(
-                          "Choose your clock face",
-                          color = Color(0xFF9EA4AD),
-                          fontSize = 14.sp
-                      )
-
-                      Spacer(Modifier.height(18.dp))
-
-                      Box(
-                          modifier = Modifier
-                              .fillMaxWidth()
-                              .weight(1f),
-                          contentAlignment = Alignment.Center
-                      ) {
-                          when (selected) {
-                              0 -> AnalogFace(time, Color(0xFFE6E6E6), Color(0xFF7C5CFF))
-                              1 -> AnalogFace(time, Color(0xFFBFC4CC), Color.White)
-                              2 -> DigitalFace(time, Color(0xFF181A1F), Color.White)
-                              3 -> DigitalFace(time, Color(0xFF071016), Color(0xFF00E5FF))
-                              else -> DigitalFace(time, Color(0xFFE8E8E8), Color(0xFF101114))
-                          }
-                      }
-
-                      LazyRow(
-                          modifier = Modifier.fillMaxWidth(),
-                          horizontalArrangement = Arrangement.spacedBy(8.dp)
-                      ) {
-                          items(faces) { face ->
-                              val borderColor =
-                                  if (selected == face.id) Color(0xFF7C5CFF)
-                                  else Color(0xFF30343B)
-
-                              Box(
-                                  modifier = Modifier
-                                      .width(100.dp)
-                                      .height(52.dp)
-                                      .border(
-                                          2.dp,
-                                          borderColor,
-                                          RoundedCornerShape(14.dp)
-                                      )
-                                      .clickable {
-                                          selected = face.id
-                                          prefs.edit()
-                                              .putInt("face", face.id)
-                                              .apply()
-                                      },
-                                  contentAlignment = Alignment.Center
-                              ) {
-                                  Text(
-                                      face.name,
-                                      color = Color.White,
-                                      fontSize = 13.sp
-                                  )
-                              }
-                          }
-                      }
-
-                      Spacer(Modifier.height(12.dp))
-
-                      Text(
-                          date,
-                          color = Color(0xFFB8BDC7),
-                          fontSize = 15.sp
-                      )
-
-                      Spacer(Modifier.height(10.dp))
-
-                      Button(
-                          onClick = {
-                              selected = (selected + 1) % faces.size
-                              prefs.edit()
-                                  .putInt("face", selected)
-                                  .apply()
-                          },
-                          modifier = Modifier.fillMaxWidth()
-                      ) {
-                          Text("Next Clock Face")
-                      }
-                  }
-              }
-          }
-
-          @Composable
-          fun AnalogFace(
-              time: String,
-              outer: Color,
-              accent: Color
-          ) {
-              val parts = time.split(":")
-              val hour = parts.getOrNull(0)?.toIntOrNull() ?: 0
-              val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
-              val second = parts.getOrNull(2)?.toIntOrNull() ?: 0
-
-              Canvas(
-                  modifier = Modifier
-                      .size(280.dp)
-                      .clip(CircleShape)
-                      .background(Color(0xFF15171C))
-              ) {
-                  val c = center
-                  val r = size.minDimension / 2f - 12f
-
-                  drawCircle(
-                      color = outer,
-                      radius = r,
-                      style = Stroke(width = 5f)
-                  )
-
-                  for (i in 0 until 12) {
-                      val angle = Math.toRadians(i * 30.0 - 90.0)
-                      val inner = r - if (i % 3 == 0) 24f else 14f
-
-                      drawLine(
-                          color = outer,
-                          start = Offset(
-                              c.x + cos(angle).toFloat() * inner,
-                              c.y + sin(angle).toFloat() * inner
-                          ),
-                          end = Offset(
-                              c.x + cos(angle).toFloat() * (r - 4f),
-                              c.y + sin(angle).toFloat() * (r - 4f)
-                          ),
-                          strokeWidth = if (i % 3 == 0) 5f else 2.5f,
-                          cap = StrokeCap.Round
-                      )
-                  }
-
-                  fun hand(angle: Double, length: Float, width: Float, color: Color) {
-                      val a = Math.toRadians(angle - 90.0)
-
-                      drawLine(
-                          color = color,
-                          start = c,
-                          end = Offset(
-                              c.x + cos(a).toFloat() * length,
-                              c.y + sin(a).toFloat() * length
-                          ),
-                          strokeWidth = width,
-                          cap = StrokeCap.Round
-                      )
-                  }
-
-                  hand(
-                      (hour % 12) * 30.0 + minute * 0.5,
-                      r * 0.50f,
-                      10f,
-                      outer
-                  )
-
-                  hand(
-                      minute * 6.0 + second * 0.1,
-                      r * 0.70f,
-                      7f,
-                      outer
-                  )
-
-                  hand(
-                      second * 6.0,
-                      r * 0.78f,
-                      3f,
-                      accent
-                  )
-
-                  drawCircle(
-                      color = accent,
-                      radius = 8f,
-                      center = c
-                  )
-              }
-          }
-
-          @Composable
-          fun DigitalFace(
-              time: String,
-              background: Color,
-              textColor: Color
-          ) {
-              Box(
-                  modifier = Modifier
-                      .size(300.dp)
-                      .clip(RoundedCornerShape(30.dp))
-                      .background(background),
-                  contentAlignment = Alignment.Center
-              ) {
-                  Text(
-                      text = time,
-                      color = textColor,
-                      fontSize = 46.sp,
-                      fontWeight = FontWeight.Bold
-                  )
-              }
-          }
-
-          KOTLIN
-
           python3 - <<'PY'
           from pathlib import Path
-
           p = Path("app/build.gradle.kts")
           s = p.read_text()
-
           block = '''
           android {
               compileOptions {
@@ -340,7 +52,6 @@ jobs:
               }
           }
           '''
-
           if "sourceCompatibility = JavaVersion.VERSION_17" not in s:
               p.write_text(s + "\n" + block)
           PY
@@ -354,17 +65,13 @@ jobs:
         run: |
           set -e
           APK=$(find extracted/ClockApp_Full -type f -path "*/build/outputs/apk/*.apk" | head -1)
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not created."
-            exit 1
-          fi
+          test -n "$APK"
           mkdir -p apk-output
-          cp "$APK" apk-output/Clock-5-Faces.apk
-          ls -lh apk-output/Clock-5-Faces.apk
+          cp "$APK" apk-output/Premium-Clock-5-Faces.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Clock-5-Faces-APK
-          path: apk-output/Clock-5-Faces.apk
+          name: Premium-Clock-5-Faces-APK
+          path: apk-output/Premium-Clock-5-Faces.apk
           if-no-files-found: error
