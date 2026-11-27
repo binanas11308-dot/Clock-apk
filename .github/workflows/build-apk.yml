@@ -20,7 +20,7 @@ jobs:
           mkdir -p project
           unzip -o ClockApp_Full_Project.zip -d project
 
-          - name: Fix Java Kotlin Target
+      - name: Fix Java Kotlin Target
         run: |
           cat >> project/ClockApp_Full/app/build.gradle.kts <<'EOF'
           android {
