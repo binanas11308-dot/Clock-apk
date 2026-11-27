@@ -20,6 +20,17 @@ jobs:
           mkdir -p project
           unzip -o ClockApp_Full_Project.zip -d project
 
+          - name: Fix Java Kotlin Target
+        run: |
+          cat >> project/ClockApp_Full/app/build.gradle.kts <<'EOF'
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+          EOF
+
       - name: Check Project Files
         run: |
           find project -name settings.gradle.kts -print
