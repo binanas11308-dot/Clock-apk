@@ -2,7 +2,7 @@ YAML
 
 name: Build Clock APK
 
-on:
+'on':
   workflow_dispatch:
   push:
     branches:
@@ -21,25 +21,18 @@ jobs:
           mkdir -p project
           unzip -o ClockApp_Full_Project.zip -d project
 
-      - name: Find Project Folder
+      - name: Find Project
         run: |
-          SETTINGS=$(find project -type f -name "settings.gradle.kts" -print -quit)
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle.kts not found"
-            exit 1
-          fi
-          PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "PROJECT_DIR=$PROJECT_DIR" >> $GITHUB_ENV
-          echo "Project folder: $PROJECT_DIR"
-          ls -la "$PROJECT_DIR"
+          find project -name settings.gradle.kts -print
+          find project -name build.gradle.kts -print
 
-      - name: Setup Java 8
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "8"
+          java-version: '8'
 
-      - name: Install Gradle 4.4.1
+      - name: Install Gradle
         run: |
           curl -L https://services.gradle.org/distributions/gradle-4.4.1-bin.zip -o gradle.zip
           unzip -q gradle.zip
@@ -47,12 +40,11 @@ jobs:
 
       - name: Build APK
         run: |
-          gradle --version
-          gradle -p "$PROJECT_DIR" assembleDebug --stacktrace
+          gradle -p project/ClockApp_Full assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Clock-APK
-          path: project/**/build/outputs/apk/**/*.apk
+          path: project/ClockApp_Full/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
