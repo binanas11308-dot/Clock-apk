@@ -1,74 +1,40 @@
-name: Build Clock APK
+me: Check Clock Project
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check project ZIP
+      - name: Check repository
         run: |
+          echo "=== Repository ==="
           ls -la
-          test -f ClockApp_Full_Project.zip
 
-      - name: Extract Android project
+          echo "=== ZIP files ==="
+          find . -maxdepth 2 -type f -name "*.zip" -print
+
+      - name: Extract project
         run: |
           rm -rf project
           mkdir project
           unzip -o ClockApp_Full_Project.zip -d project
-          echo "Project extracted:"
-          find project -maxdepth 2 -type f | head -50
 
-      - name: Find Gradle project
+          echo "=== Extracted files ==="
+          find project -maxdepth 4 -type f -print | sort
+
+      - name: Find Gradle wrapper
         run: |
-          if [ -f project/settings.gradle ]; then
-            echo "PROJECT_DIR=project" >> "$GITHUB_ENV"
-          elif [ -f project/settings.gradle.kts ]; then
-            echo "PROJECT_DIR=project" >> "$GITHUB_ENV"
-          else
-            DIR=$(find project -name settings.gradle -o -name settings.gradle.kts | head -1 | xargs -r dirname)
-            if [ -z "$DIR" ]; then
-              echo "Gradle project not found"
-              exit 1
-            fi
-            echo "PROJECT_DIR=$DIR" >> "$GITHUB_ENV"
-          fi
+          echo "=== gradlew files ==="
+          find project -type f -name "gradlew" -print
 
-      - name: Setup JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+          echo "=== settings files ==="
+          find project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Make Gradle executable
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          chmod +x gradlew
-
-      - name: Build APK
-        working-directory: ${{ env.PROJECT_DIR }}
-        run: |
-          ./gradlew assembleDebug --stacktrace
-
-      - name: Find APK
-        run: |
-          find "${PROJECT_DIR}" -type f -name "*.apk" -print
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clock-APK
-          path: |
-            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/**/*.apk
-          if-no-files-found: error
+          echo "=== build files ==="
+          find project -type f \( -name "build.gradle" -o -name "build.gradle.kts" \) -print
