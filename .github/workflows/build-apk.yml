@@ -1,46 +1,58 @@
-name: Check Clock Project
+name: Build Clock APK
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-  check:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check repository
-        run: |
-          echo "Repository files:"
-          ls -la
-          echo "ZIP files:"
-          find . -maxdepth 2 -type f -name "*.zip" -print
-
-      - name: Extract project
+      - name: Extract Android project
         run: |
           rm -rf project
           mkdir project
           unzip -o ClockApp_Full_Project.zip -d project
-          echo "Extracted files:"
-          find project -maxdepth 4 -type f -print | sort
 
-      - name: Find Gradle wrapper
-        run: |
-          echo "gradlew:"
-          find project -type f -name "gradlew" -print
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
 
-      - name: Find settings files
-        run: |
-          echo "settings.gradle:"
-          find project -type f -name "settings.gradle" -print
-          echo "settings.gradle.kts:"
-          find project -type f -name "settings.gradle.kts" -print
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Find build files
+      - name: Install Gradle
         run: |
-          echo "build.gradle:"
-          find project -type f -name "build.gradle" -print
-          echo "build.gradle.kts:"
-          find project -type f -name "build.gradle.kts" -print
+          sudo apt-get update
+          sudo apt-get install -y gradle
+          gradle --version
+
+      - name: Create Gradle wrapper
+        working-directory: project/ClockApp_Full
+        run: |
+          gradle wrapper
+          chmod +x gradlew
+
+      - name: Build Debug APK
+        working-directory: project/ClockApp_Full
+        run: |
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Find APK
+        run: |
+          find project/ClockApp_Full -type f -name "*.apk" -print
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Clock-APK
+          path: project/ClockApp_Full/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
