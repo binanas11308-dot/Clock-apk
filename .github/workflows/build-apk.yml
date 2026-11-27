@@ -212,7 +212,8 @@ jobs:
                   Text(
                       text = state.selectedFace.title,
                       style = MaterialTheme.typography.titleMedium,
-                      fontWeight = FontWeight.Bold
+                      fontWeight = FontWeight.Bold,
+                      color = Color.White
                   )
 
                   Box(
@@ -272,7 +273,7 @@ jobs:
                               .horizontalScroll(rememberScrollState()),
                           horizontalArrangement = Arrangement.spacedBy(8.dp)
                       ) {
-                          ClockFaceType.entries.forEach { face ->
+                          ClockFaceType.values().forEach { face ->
                               val selected = face == state.selectedFace
                               FilterChip(
                                   selected = selected,
@@ -287,7 +288,7 @@ jobs:
                           horizontalArrangement = Arrangement.SpaceBetween,
                           verticalAlignment = Alignment.CenterVertically
                       ) {
-                          Text("24-Hour Time", fontWeight = FontWeight.Medium)
+                          Text("24-Hour Time", fontWeight = FontWeight.Medium, color = Color.White)
                           Switch(
                               checked = state.is24HourFormat,
                               onCheckedChange = { viewModel.set24HourFormat(it) }
@@ -299,9 +300,9 @@ jobs:
                           horizontalArrangement = Arrangement.SpaceBetween,
                           verticalAlignment = Alignment.CenterVertically
                       ) {
-                          Text("Digital Colour", fontWeight = FontWeight.Medium)
+                          Text("Digital Colour", fontWeight = FontWeight.Medium, color = Color.White)
                           Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                              DigitalAccentColor.entries.forEach { colorOption ->
+                              DigitalAccentColor.values().forEach { colorOption ->
                                   val c = Color(colorOption.argb)
                                   val isSelected = state.digitalColor == colorOption
                                   Box(
@@ -545,21 +546,19 @@ jobs:
           cat <<'EOF' > "$JAVA_DIR/MainActivity.kt"
           package com.example
 
-          import android.graphics.Color as AndroidColor
           import android.os.Bundle
           import androidx.activity.ComponentActivity
-          import androidx.activity.SystemBarStyle
           import androidx.activity.compose.setContent
-          import androidx.activity.enableEdgeToEdge
           import androidx.activity.viewModels
           import androidx.compose.foundation.layout.fillMaxSize
           import androidx.compose.foundation.layout.padding
+          import androidx.compose.material3.MaterialTheme
           import androidx.compose.material3.Scaffold
+          import androidx.compose.material3.darkColorScheme
           import androidx.compose.ui.Modifier
           import androidx.compose.ui.graphics.Color
           import com.example.clock.ClockViewModel
           import com.example.ui.ClockScreen
-          import com.example.ui.theme.ClockAppTheme
 
           class MainActivity : ComponentActivity() {
 
@@ -567,12 +566,9 @@ jobs:
 
               override fun onCreate(savedInstanceState: Bundle?) {
                   super.onCreate(savedInstanceState)
-                  enableEdgeToEdge(
-                      statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
-                      navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT)
-                  )
+                  window.setBackgroundDrawableResource(android.R.color.transparent)
                   setContent {
-                      ClockAppTheme {
+                      MaterialTheme(colorScheme = darkColorScheme()) {
                           Scaffold(
                               modifier = Modifier.fillMaxSize(),
                               containerColor = Color.Transparent
