@@ -1,58 +1,35 @@
-
 name: Build Clock APK
 
-'on':
+on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ClockApp_Full
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Extract Project
-        run: |
-          mkdir -p project
-          unzip -o ClockApp_Full_Project.zip -d project
-
-      - name: Fix Java Kotlin Target
-        run: |
-          cat >> project/ClockApp_Full/app/build.gradle.kts <<'EOF'
-          android {
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-          }
-          EOF
-
-      - name: Check Project Files
-        run: |
-          find project -name settings.gradle.kts -print
-          find project -name build.gradle.kts -print
-
-      - name: Setup Java
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
           java-version: '17'
+          distribution: 'temurin'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK
-        run: |
-          cd project/ClockApp_Full
-          gradle assembleDebug
+      - name: Build Debug APK
+        run: gradle assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Clock-APK
-          path: project/ClockApp_Full/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          name: ClockApp-Debug-APK
+          path: ClockApp_Full/app/build/outputs/apk/debug/*.apk
