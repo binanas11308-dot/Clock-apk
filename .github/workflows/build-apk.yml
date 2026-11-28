@@ -42,7 +42,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Fix JVM 17
+            - name: Fix JVM 17
         shell: bash
         run: |
           set -e
@@ -54,10 +54,58 @@ jobs:
             exit 1
           fi
 
-          sed -i 's/JavaVersion\.VERSION_1_8/JavaVersion.VERSION_17/g' "$GRADLE_FILE"
-          sed -i 's/jvmTarget = "1\.8"/jvmTarget = "17"/g' "$GRADLE_FILE"
-          sed -i 's/JvmTarget\.JVM_1_8/JvmTarget.JVM_17/g' "$GRADLE_FILE"
+          python3 - <<'PY'
+          from pathlib import Path
 
+          p = Path("ClockApp_Full/app/build.gradle.kts")
+          s = p.read_text()
+
+          s = s.replace(
+              'JavaVersion.VERSION_1_8',
+              'JavaVersion.VERSION_17'
+          )
+
+          s = s.replace(
+              'JavaVersion.VERSION_11',
+              'JavaVersion.VERSION_17'
+          )
+
+          s = s.replace(
+              'jvmTarget = "1.8"',
+              'jvmTarget = "17"'
+          )
+
+          s = s.replace(
+              'jvmTarget = "8"',
+              'jvmTarget = "17"'
+          )
+
+          s = s.replace(
+              'jvmTarget = "11"',
+              'jvmTarget = "17"'
+          )
+
+          if 'sourceCompatibility = JavaVersion.VERSION_17' not in s:
+              s += '''
+
+          android {
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          }
+
+          tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          '''
+
+          p.write_text(s)
+          PY
+
+          echo "JVM 17 configuration applied."
       - name: Create 5 Clock Face system
         shell: bash
         run: |
@@ -1022,7 +1070,7 @@ jobs:
                           color.argb.toInt()
                       )
 
-                      # Face-specific 3D appearance
+                      // Face-specific 3D appearance
                       val background =
                           when (face) {
 
@@ -1061,7 +1109,7 @@ jobs:
                           backgroundId
                       )
 
-                      # Previous face
+                      // Previous face
                       val leftIntent =
                           Intent(
                               context,
@@ -1076,7 +1124,7 @@ jobs:
                               )
                           }
 
-                      # Next face
+                      // Next face
                       val rightIntent =
                           Intent(
                               context,
