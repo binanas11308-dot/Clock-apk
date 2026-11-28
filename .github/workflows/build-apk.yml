@@ -14,70 +14,153 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Extract project ZIP
+        shell: bash
         run: |
-          ZIP_FILE=$(find . -maxdepth 2 -name "*.zip" | head -n 1)
+          set -e
+          ZIP_FILE=$(find . -maxdepth 2 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No project ZIP found."
+            exit 1
+          fi
+
           echo "Found ZIP: $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d .
 
-      - name: Align Java and Kotlin JVM target to 17
+          if [ ! -d "ClockApp_Full" ]; then
+            echo "ERROR: ClockApp_Full folder not found."
+            find . -maxdepth 3 -type f | head -100
+            exit 1
+          fi
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Fix JVM 17
+        shell: bash
         run: |
+          set -e
+
           GRADLE_FILE="ClockApp_Full/app/build.gradle.kts"
+
+          if [ ! -f "$GRADLE_FILE" ]; then
+            echo "ERROR: $GRADLE_FILE not found."
+            exit 1
+          fi
+
           sed -i 's/JavaVersion\.VERSION_1_8/JavaVersion.VERSION_17/g' "$GRADLE_FILE"
           sed -i 's/jvmTarget = "1\.8"/jvmTarget = "17"/g' "$GRADLE_FILE"
           sed -i 's/JvmTarget\.JVM_1_8/JvmTarget.JVM_17/g' "$GRADLE_FILE"
 
-          if ! grep -q "compileOptions" "$GRADLE_FILE"; then
-            printf '\nandroid {\n    compileOptions {\n        sourceCompatibility = JavaVersion.VERSION_17\n        targetCompatibility = JavaVersion.VERSION_17\n    }\n}\n' >> "$GRADLE_FILE"
-          fi
-
-          if ! grep -q "kotlinOptions" "$GRADLE_FILE" && ! grep -q "compilerOptions" "$GRADLE_FILE"; then
-            printf '\nkotlin {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n' >> "$GRADLE_FILE"
-          fi
-
-      - name: Apply 5x 3D Clock Faces and Widget code
+      - name: Create 5 Clock Face system
+        shell: bash
         run: |
+          set -e
+
           BASE="ClockApp_Full/app/src/main"
-          JAVA_DIR="$BASE/java/com/example"
+          JAVA="com/example"
+          JAVA_DIR="$BASE/java/$JAVA"
 
-          mkdir -p "$JAVA_DIR/clock" "$JAVA_DIR/ui" "$JAVA_DIR/widget" "$BASE/res/drawable" "$BASE/res/layout" "$BASE/res/layout-v26"
+          mkdir -p "$JAVA_DIR/clock"
+          mkdir -p "$JAVA_DIR/widget"
+          mkdir -p "$JAVA_DIR/ui"
+          mkdir -p "$BASE/res/layout"
+          mkdir -p "$BASE/res/drawable"
+          mkdir -p "$BASE/res/drawable-v24"
 
-          cat <<'EOF' > "$JAVA_DIR/clock/ClockState.kt"
+          # ------------------------------------------------------------
+          # CLOCK STATE
+          # ------------------------------------------------------------
+
+          cat > "$JAVA_DIR/clock/ClockState.kt" <<'EOF'
           package com.example.clock
 
-          enum class ClockFaceType(val title: String, val isDigital: Boolean) {
-              OBSIDIAN_ANALOG("3D Obsidian Analog", false),
-              CHROME_ANALOG("3D Chrome Analog", false),
-              GLASS_NEON_DIGITAL("3D Glass Digital", true),
-              SCULPTED_DIGITAL("3D Sculpted Digital", true),
-              AURORA_HYBRID("3D Aurora Hybrid", false)
+          enum class ClockFaceType(
+              val title: String,
+              val isDigital: Boolean
+          ) {
+              OBSIDIAN_ANALOG(
+                  "3D Obsidian Analog",
+                  false
+              ),
+
+              CHROME_ANALOG(
+                  "3D Chrome Analog",
+                  false
+              ),
+
+              GLASS_NEON_DIGITAL(
+                  "3D Glass Neon Digital",
+                  true
+              ),
+
+              SCULPTED_DIGITAL(
+                  "3D Sculpted Digital",
+                  true
+              ),
+
+              AURORA_HYBRID(
+                  "3D Aurora Hybrid",
+                  false
+              )
           }
 
-          enum class DigitalAccentColor(val label: String, val argb: Long) {
-              CYAN("Cyan", 0xFF00E5FF),
-              EMERALD("Emerald", 0xFF00E676),
-              AMBER("Amber", 0xFFFFAB00)
+          enum class DigitalAccentColor(
+              val label: String,
+              val argb: Long
+          ) {
+              CYAN(
+                  "Cyan",
+                  0xFF00E5FF
+              ),
+
+              EMERALD(
+                  "Emerald",
+                  0xFF00E676
+              ),
+
+              AMBER(
+                  "Amber",
+                  0xFFFFAB00
+              )
           }
 
           data class ClockUiState(
-              val selectedFace: ClockFaceType = ClockFaceType.OBSIDIAN_ANALOG,
+              val selectedFace: ClockFaceType =
+                  ClockFaceType.OBSIDIAN_ANALOG,
+
               val is24HourFormat: Boolean = false,
-              val digitalColor: DigitalAccentColor = DigitalAccentColor.CYAN,
+
+              val digitalColor: DigitalAccentColor =
+                  DigitalAccentColor.CYAN,
+
               val transparentBackground: Boolean = true,
-              val hour: Int = 10,
-              val minute: Int = 10,
-              val second: Int = 30,
-              val dateText: String = "SAT, NOV 28"
+
+              val hour: Int = 0,
+              val minute: Int = 0,
+              val second: Int = 0,
+
+              val dateText: String = ""
           )
           EOF
 
-          cat <<'EOF' > "$JAVA_DIR/clock/ClockViewModel.kt"
+          # ------------------------------------------------------------
+          # VIEW MODEL
+          # ------------------------------------------------------------
+
+          cat > "$JAVA_DIR/clock/ClockViewModel.kt" <<'EOF'
           package com.example.clock
 
           import android.app.Application
           import android.content.Context
           import androidx.lifecycle.AndroidViewModel
           import androidx.lifecycle.viewModelScope
-          import com.example.widget.ClockWidgetProvider
           import kotlinx.coroutines.delay
           import kotlinx.coroutines.flow.MutableStateFlow
           import kotlinx.coroutines.flow.StateFlow
@@ -88,503 +171,589 @@ jobs:
           import java.util.Calendar
           import java.util.Locale
 
-          class ClockViewModel(app: Application) : AndroidViewModel(app) {
+          class ClockViewModel(
+              app: Application
+          ) : AndroidViewModel(app) {
 
-              private val prefs = app.getSharedPreferences("clock_prefs", Context.MODE_PRIVATE)
+              private val prefs =
+                  app.getSharedPreferences(
+                      "clock_prefs",
+                      Context.MODE_PRIVATE
+                  )
 
-              private val _uiState = MutableStateFlow(loadInitialState())
-              val uiState: StateFlow<ClockUiState> = _uiState.asStateFlow()
+              private val _uiState =
+                  MutableStateFlow(loadInitialState())
+
+              val uiState: StateFlow<ClockUiState> =
+                  _uiState.asStateFlow()
 
               init {
                   viewModelScope.launch {
                       while (true) {
-                          refreshClockTime()
+                          refreshTime()
                           delay(1000L)
                       }
                   }
               }
 
               private fun loadInitialState(): ClockUiState {
-                  val faceName = prefs.getString("selected_face", ClockFaceType.OBSIDIAN_ANALOG.name)
-                  val face = runCatching { ClockFaceType.valueOf(faceName!!) }
-                      .getOrDefault(ClockFaceType.OBSIDIAN_ANALOG)
 
-                  val colorName = prefs.getString("digital_color", DigitalAccentColor.CYAN.name)
-                  val color = runCatching { DigitalAccentColor.valueOf(colorName!!) }
-                      .getOrDefault(DigitalAccentColor.CYAN)
+                  val faceName =
+                      prefs.getString(
+                          "selected_face",
+                          ClockFaceType.OBSIDIAN_ANALOG.name
+                      )
 
-                  val is24h = prefs.getBoolean("is_24_hour", false)
+                  val face =
+                      runCatching {
+                          ClockFaceType.valueOf(faceName ?: "")
+                      }.getOrDefault(
+                          ClockFaceType.OBSIDIAN_ANALOG
+                      )
+
+                  val colorName =
+                      prefs.getString(
+                          "digital_color",
+                          DigitalAccentColor.CYAN.name
+                      )
+
+                  val color =
+                      runCatching {
+                          DigitalAccentColor.valueOf(colorName ?: "")
+                      }.getOrDefault(
+                          DigitalAccentColor.CYAN
+                      )
 
                   return ClockUiState(
                       selectedFace = face,
-                      is24HourFormat = is24h,
+                      is24HourFormat =
+                          prefs.getBoolean(
+                              "is_24_hour",
+                              false
+                          ),
                       digitalColor = color,
                       transparentBackground = true
                   ).withCurrentTime()
               }
 
-              private fun refreshClockTime() {
-                  _uiState.update { it.withCurrentTime() }
+              private fun refreshTime() {
+                  _uiState.update {
+                      it.withCurrentTime()
+                  }
               }
 
-              private fun ClockUiState.withCurrentTime(): ClockUiState {
-                  val cal = Calendar.getInstance()
-                  val formatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
+              private fun ClockUiState.withCurrentTime():
+                  ClockUiState {
+
+                  val calendar = Calendar.getInstance()
+
+                  val formatter =
+                      SimpleDateFormat(
+                          "EEE, MMM d",
+                          Locale.getDefault()
+                      )
+
                   return copy(
-                      hour = cal.get(Calendar.HOUR_OF_DAY),
-                      minute = cal.get(Calendar.MINUTE),
-                      second = cal.get(Calendar.SECOND),
-                      dateText = formatter.format(cal.time).uppercase(Locale.getDefault())
+                      hour =
+                          calendar.get(
+                              Calendar.HOUR_OF_DAY
+                          ),
+
+                      minute =
+                          calendar.get(
+                              Calendar.MINUTE
+                          ),
+
+                      second =
+                          calendar.get(
+                              Calendar.SECOND
+                          ),
+
+                      dateText =
+                          formatter
+                              .format(calendar.time)
+                              .uppercase(
+                                  Locale.getDefault()
+                              )
                   )
               }
 
               fun selectFace(face: ClockFaceType) {
-                  prefs.edit().putString("selected_face", face.name).apply()
-                  _uiState.update { it.copy(selectedFace = face) }
-                  ClockWidgetProvider.refreshAllWidgets(getApplication())
+
+                  prefs.edit()
+                      .putString(
+                          "selected_face",
+                          face.name
+                      )
+                      .apply()
+
+                  _uiState.update {
+                      it.copy(
+                          selectedFace = face
+                      )
+                  }
               }
 
               fun set24HourFormat(enabled: Boolean) {
-                  prefs.edit().putBoolean("is_24_hour", enabled).apply()
-                  _uiState.update { it.copy(is24HourFormat = enabled) }
-                  ClockWidgetProvider.refreshAllWidgets(getApplication())
+
+                  prefs.edit()
+                      .putBoolean(
+                          "is_24_hour",
+                          enabled
+                      )
+                      .apply()
+
+                  _uiState.update {
+                      it.copy(
+                          is24HourFormat = enabled
+                      )
+                  }
               }
 
-              fun selectDigitalColor(color: DigitalAccentColor) {
-                  prefs.edit().putString("digital_color", color.name).apply()
-                  _uiState.update { it.copy(digitalColor = color) }
-                  ClockWidgetProvider.refreshAllWidgets(getApplication())
+              fun selectDigitalColor(
+                  color: DigitalAccentColor
+              ) {
+
+                  prefs.edit()
+                      .putString(
+                          "digital_color",
+                          color.name
+                      )
+                      .apply()
+
+                  _uiState.update {
+                      it.copy(
+                          digitalColor = color
+                      )
+                  }
               }
           }
           EOF
 
-          cat <<'EOF' > "$JAVA_DIR/ui/ClockScreen.kt"
-          package com.example.ui
+          # ------------------------------------------------------------
+          # MAIN ACTIVITY
+          # ------------------------------------------------------------
 
-          import androidx.compose.foundation.Canvas
-          import androidx.compose.foundation.background
-          import androidx.compose.foundation.border
-          import androidx.compose.foundation.clickable
-          import androidx.compose.foundation.horizontalScroll
-          import androidx.compose.foundation.layout.*
-          import androidx.compose.foundation.rememberScrollState
-          import androidx.compose.foundation.shape.CircleShape
-          import androidx.compose.foundation.shape.RoundedCornerShape
-          import androidx.compose.material3.*
-          import androidx.compose.runtime.Composable
-          import androidx.compose.runtime.collectAsState
-          import androidx.compose.runtime.getValue
-          import androidx.compose.ui.Alignment
-          import androidx.compose.ui.Modifier
-          import androidx.compose.ui.draw.clip
-          import androidx.compose.ui.geometry.Offset
-          import androidx.compose.ui.graphics.Brush
-          import androidx.compose.ui.graphics.Color
-          import androidx.compose.ui.graphics.StrokeCap
-          import androidx.compose.ui.graphics.drawscope.Stroke
-          import androidx.compose.ui.text.font.FontWeight
-          import androidx.compose.ui.unit.dp
-          import androidx.compose.ui.unit.sp
-          import com.example.clock.ClockFaceType
-          import com.example.clock.ClockUiState
-          import com.example.clock.ClockViewModel
-          import com.example.clock.DigitalAccentColor
-          import java.util.Locale
-          import kotlin.math.PI
-          import kotlin.math.cos
-          import kotlin.math.sin
-
-          @Composable
-          fun ClockScreen(
-              viewModel: ClockViewModel,
-              modifier: Modifier = Modifier
-          ) {
-              val state by viewModel.uiState.collectAsState()
-
-              Column(
-                  modifier = modifier
-                      .fillMaxSize()
-                      .background(Color.Transparent)
-                      .padding(16.dp),
-                  horizontalAlignment = Alignment.CenterHorizontally,
-                  verticalArrangement = Arrangement.SpaceBetween
-              ) {
-                  Text(
-                      text = state.selectedFace.title,
-                      style = MaterialTheme.typography.titleMedium,
-                      fontWeight = FontWeight.Bold,
-                      color = Color.White
-                  )
-
-                  Box(
-                      modifier = Modifier
-                          .size(270.dp)
-                          .background(Color.Transparent),
-                      contentAlignment = Alignment.Center
-                  ) {
-                      when (state.selectedFace) {
-                          ClockFaceType.OBSIDIAN_ANALOG -> ThreeDAnalogFace(
-                              state = state,
-                              rimStart = Color(0xFF3A414A),
-                              rimEnd = Color(0xFF101317),
-                              handColor = Color(0xFFF5F7FA),
-                              accentColor = Color(0xFF38BDF8),
-                              showDate = true
-                          )
-                          ClockFaceType.CHROME_ANALOG -> ThreeDAnalogFace(
-                              state = state,
-                              rimStart = Color(0xFFE2E8F0),
-                              rimEnd = Color(0xFF475569),
-                              handColor = Color(0xFFFFFFFF),
-                              accentColor = Color(0xFFF43F5E),
-                              showDate = true
-                          )
-                          ClockFaceType.GLASS_NEON_DIGITAL -> ThreeDDigitalFace(
-                              state = state,
-                              cardTop = Color(0x661E293B),
-                              cardBottom = Color(0x440F172A),
-                              sculptedBlocks = false
-                          )
-                          ClockFaceType.SCULPTED_DIGITAL -> ThreeDDigitalFace(
-                              state = state,
-                              cardTop = Color(0x6627272A),
-                              cardBottom = Color(0x4418181B),
-                              sculptedBlocks = true
-                          )
-                          ClockFaceType.AURORA_HYBRID -> ThreeDAnalogFace(
-                              state = state,
-                              rimStart = Color(0xFF00E5FF),
-                              rimEnd = Color(0xFF7C3AED),
-                              handColor = Color(0xFFFFFFFF),
-                              accentColor = Color(state.digitalColor.argb),
-                              showDate = true,
-                              showMiniDigital = true
-                          )
-                      }
-                  }
-
-                  Column(
-                      modifier = Modifier.fillMaxWidth(),
-                      verticalArrangement = Arrangement.spacedBy(12.dp)
-                  ) {
-                      Row(
-                          modifier = Modifier
-                              .fillMaxWidth()
-                              .horizontalScroll(rememberScrollState()),
-                          horizontalArrangement = Arrangement.spacedBy(8.dp)
-                      ) {
-                          ClockFaceType.values().forEach { face ->
-                              val selected = face == state.selectedFace
-                              FilterChip(
-                                  selected = selected,
-                                  onClick = { viewModel.selectFace(face) },
-                                  label = { Text(face.title, maxLines = 1) }
-                              )
-                          }
-                      }
-
-                      Row(
-                          modifier = Modifier.fillMaxWidth(),
-                          horizontalArrangement = Arrangement.SpaceBetween,
-                          verticalAlignment = Alignment.CenterVertically
-                      ) {
-                          Text("24-Hour Time", fontWeight = FontWeight.Medium, color = Color.White)
-                          Switch(
-                              checked = state.is24HourFormat,
-                              onCheckedChange = { viewModel.set24HourFormat(it) }
-                          )
-                      }
-
-                      Row(
-                          modifier = Modifier.fillMaxWidth(),
-                          horizontalArrangement = Arrangement.SpaceBetween,
-                          verticalAlignment = Alignment.CenterVertically
-                      ) {
-                          Text("Digital Colour", fontWeight = FontWeight.Medium, color = Color.White)
-                          Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                              DigitalAccentColor.values().forEach { colorOption ->
-                                  val c = Color(colorOption.argb)
-                                  val isSelected = state.digitalColor == colorOption
-                                  Box(
-                                      modifier = Modifier
-                                          .size(30.dp)
-                                          .clip(CircleShape)
-                                          .background(c)
-                                          .border(
-                                              width = if (isSelected) 3.dp else 1.dp,
-                                              color = if (isSelected) Color.White else Color.Gray,
-                                              shape = CircleShape
-                                          )
-                                          .clickable { viewModel.selectDigitalColor(colorOption) }
-                                  )
-                              }
-                          }
-                      }
-                  }
-              }
-          }
-
-          @Composable
-          private fun ThreeDAnalogFace(
-              state: ClockUiState,
-              rimStart: Color,
-              rimEnd: Color,
-              handColor: Color,
-              accentColor: Color,
-              showDate: Boolean,
-              showMiniDigital: Boolean = false
-          ) {
-              val hour12 = (state.hour % 12) + state.minute / 60f
-              val hourAngle = (hour12 * 30f - 90f) * (PI / 180.0).toFloat()
-              val minuteAngle = ((state.minute + state.second / 60f) * 6f - 90f) * (PI / 180.0).toFloat()
-              val secondAngle = (state.second * 6f - 90f) * (PI / 180.0).toFloat()
-
-              Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                  Canvas(modifier = Modifier.fillMaxSize()) {
-                      val center = Offset(size.width / 2f, size.height / 2f)
-                      val radius = size.minDimension / 2f - 10.dp.toPx()
-
-                      drawCircle(
-                          color = Color.Black.copy(alpha = 0.35f),
-                          radius = radius + 3.dp.toPx(),
-                          center = center + Offset(0f, 5.dp.toPx()),
-                          style = Stroke(width = 10.dp.toPx())
-                      )
-                      drawCircle(
-                          brush = Brush.linearGradient(
-                              colors = listOf(rimStart, rimEnd),
-                              start = Offset(0f, 0f),
-                              end = Offset(size.width, size.height)
-                          ),
-                          radius = radius,
-                          center = center,
-                          style = Stroke(width = 8.dp.toPx())
-                      )
-
-                      for (i in 0 until 12) {
-                          val angle = (i * 30f - 90f) * (PI / 180.0).toFloat()
-                          val inner = radius * 0.80f
-                          val outer = radius * 0.90f
-                          val start = Offset(center.x + inner * cos(angle), center.y + inner * sin(angle))
-                          val end = Offset(center.x + outer * cos(angle), center.y + outer * sin(angle))
-                          drawLine(
-                              color = Color.Black.copy(alpha = 0.45f),
-                              start = start + Offset(1.5.dp.toPx(), 2.dp.toPx()),
-                              end = end + Offset(1.5.dp.toPx(), 2.dp.toPx()),
-                              strokeWidth = 4.dp.toPx(),
-                              cap = StrokeCap.Round
-                          )
-                          drawLine(
-                              color = handColor,
-                              start = start,
-                              end = end,
-                              strokeWidth = 4.dp.toPx(),
-                              cap = StrokeCap.Round
-                          )
-                      }
-
-                      fun drawThreeDHand(angle: Float, lengthRatio: Float, widthDp: Float, color: Color) {
-                          val end = Offset(
-                              center.x + radius * lengthRatio * cos(angle),
-                              center.y + radius * lengthRatio * sin(angle)
-                          )
-                          drawLine(
-                              color = Color.Black.copy(alpha = 0.45f),
-                              start = center + Offset(2.dp.toPx(), 3.dp.toPx()),
-                              end = end + Offset(2.dp.toPx(), 3.dp.toPx()),
-                              strokeWidth = widthDp.dp.toPx(),
-                              cap = StrokeCap.Round
-                          )
-                          drawLine(
-                              color = color,
-                              start = center,
-                              end = end,
-                              strokeWidth = widthDp.dp.toPx(),
-                              cap = StrokeCap.Round
-                          )
-                      }
-
-                      drawThreeDHand(hourAngle, 0.50f, 7f, handColor)
-                      drawThreeDHand(minuteAngle, 0.72f, 5f, handColor)
-                      drawThreeDHand(secondAngle, 0.80f, 2.5f, accentColor)
-
-                      drawCircle(
-                          color = accentColor,
-                          radius = 7.dp.toPx(),
-                          center = center
-                      )
-                      drawCircle(
-                          color = Color.White,
-                          radius = 3.dp.toPx(),
-                          center = center
-                      )
-                  }
-
-                  val digitRadius = 86.dp
-                  for (num in 1..12) {
-                      val angleRad = (num * 30f - 90f) * (PI / 180.0)
-                      val dx = (digitRadius.value * cos(angleRad)).dp
-                      val dy = (digitRadius.value * sin(angleRad)).dp
-                      Text(
-                          text = num.toString(),
-                          fontSize = 12.sp,
-                          fontWeight = FontWeight.Bold,
-                          color = handColor,
-                          modifier = Modifier.offset(x = dx, y = dy)
-                      )
-                  }
-
-                  if (showDate) {
-                      Surface(
-                          modifier = Modifier
-                              .align(Alignment.BottomCenter)
-                              .padding(bottom = 44.dp),
-                          shape = RoundedCornerShape(8.dp),
-                          color = Color.Black.copy(alpha = 0.45f)
-                      ) {
-                          Text(
-                              text = state.dateText,
-                              fontSize = 11.sp,
-                              fontWeight = FontWeight.SemiBold,
-                              color = Color.White,
-                              modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                          )
-                      }
-                  }
-
-                  if (showMiniDigital) {
-                      Surface(
-                          modifier = Modifier
-                              .align(Alignment.TopCenter)
-                              .padding(top = 48.dp),
-                          shape = RoundedCornerShape(8.dp),
-                          color = Color.Black.copy(alpha = 0.45f)
-                      ) {
-                          Text(
-                              text = formatDigitalTime(state.hour, state.minute, state.is24HourFormat),
-                              fontSize = 12.sp,
-                              fontWeight = FontWeight.Bold,
-                              color = Color(state.digitalColor.argb),
-                              modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                          )
-                      }
-                  }
-              }
-          }
-
-          @Composable
-          private fun ThreeDDigitalFace(
-              state: ClockUiState,
-              cardTop: Color,
-              cardBottom: Color,
-              sculptedBlocks: Boolean
-          ) {
-              val accent = Color(state.digitalColor.argb)
-              val timeText = formatDigitalTime(state.hour, state.minute, state.is24HourFormat)
-
-              Box(
-                  modifier = Modifier
-                      .fillMaxSize()
-                      .clip(RoundedCornerShape(28.dp))
-                      .background(
-                          Brush.verticalGradient(listOf(cardTop, cardBottom))
-                      )
-                      .border(
-                          width = 1.5.dp,
-                          brush = Brush.linearGradient(
-                              listOf(accent.copy(alpha = 0.85f), Color.White.copy(alpha = 0.25f))
-                          ),
-                          shape = RoundedCornerShape(28.dp)
-                      ),
-                  contentAlignment = Alignment.Center
-              ) {
-                  Column(
-                      horizontalAlignment = Alignment.CenterHorizontally,
-                      verticalArrangement = Arrangement.spacedBy(8.dp)
-                  ) {
-                      Box(contentAlignment = Alignment.Center) {
-                          Text(
-                              text = timeText,
-                              fontSize = if (sculptedBlocks) 42.sp else 40.sp,
-                              fontWeight = FontWeight.ExtraBold,
-                              color = Color.Black.copy(alpha = 0.65f),
-                              modifier = Modifier.offset(x = 2.dp, y = 4.dp)
-                          )
-                          Text(
-                              text = timeText,
-                              fontSize = if (sculptedBlocks) 42.sp else 40.sp,
-                              fontWeight = FontWeight.ExtraBold,
-                              color = accent
-                          )
-                      }
-
-                      Text(
-                          text = String.format(Locale.getDefault(), "%02d SEC • %s", state.second, state.dateText),
-                          fontSize = 12.sp,
-                          fontWeight = FontWeight.SemiBold,
-                          color = Color.White.copy(alpha = 0.9f)
-                      )
-                  }
-              }
-          }
-
-          fun formatDigitalTime(hour24: Int, minute: Int, is24Hour: Boolean): String {
-              return if (is24Hour) {
-                  String.format(Locale.getDefault(), "%02d:%02d", hour24, minute)
-              } else {
-                  val hour12 = when {
-                      hour24 == 0 -> 12
-                      hour24 > 12 -> hour24 - 12
-                      else -> hour24
-                  }
-                  val amPm = if (hour24 >= 12) "PM" else "AM"
-                  String.format(Locale.getDefault(), "%d:%02d %s", hour12, minute, amPm)
-              }
-          }
-          EOF
-
-          cat <<'EOF' > "$JAVA_DIR/MainActivity.kt"
+          cat > "$JAVA_DIR/MainActivity.kt" <<'EOF'
           package com.example
 
           import android.os.Bundle
           import androidx.activity.ComponentActivity
           import androidx.activity.compose.setContent
           import androidx.activity.viewModels
+          import androidx.compose.foundation.background
+          import androidx.compose.foundation.clickable
+          import androidx.compose.foundation.horizontalScroll
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Box
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.Row
+          import androidx.compose.foundation.layout.Spacer
           import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.fillMaxWidth
+          import androidx.compose.foundation.layout.height
           import androidx.compose.foundation.layout.padding
+          import androidx.compose.foundation.layout.size
+          import androidx.compose.foundation.layout.width
+          import androidx.compose.foundation.rememberScrollState
+          import androidx.compose.foundation.shape.CircleShape
+          import androidx.compose.foundation.shape.RoundedCornerShape
+          import androidx.compose.material3.FilterChip
           import androidx.compose.material3.MaterialTheme
           import androidx.compose.material3.Scaffold
+          import androidx.compose.material3.Surface
+          import androidx.compose.material3.Switch
+          import androidx.compose.material3.Text
           import androidx.compose.material3.darkColorScheme
+          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.collectAsState
+          import androidx.compose.runtime.getValue
+          import androidx.compose.ui.Alignment
           import androidx.compose.ui.Modifier
+          import androidx.compose.ui.draw.clip
+          import androidx.compose.ui.graphics.Brush
           import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.unit.dp
+          import androidx.compose.ui.unit.sp
+          import com.example.clock.ClockFaceType
           import com.example.clock.ClockViewModel
-          import com.example.ui.ClockScreen
+          import com.example.clock.DigitalAccentColor
+          import java.util.Locale
 
           class MainActivity : ComponentActivity() {
 
-              private val clockViewModel: ClockViewModel by viewModels()
+              private val viewModel: ClockViewModel by viewModels()
 
-              override fun onCreate(savedInstanceState: Bundle?) {
+              override fun onCreate(
+                  savedInstanceState: Bundle?
+              ) {
                   super.onCreate(savedInstanceState)
-                  window.setBackgroundDrawableResource(android.R.color.transparent)
+
                   setContent {
-                      MaterialTheme(colorScheme = darkColorScheme()) {
+
+                      MaterialTheme(
+                          colorScheme =
+                              darkColorScheme()
+                      ) {
+
                           Scaffold(
-                              modifier = Modifier.fillMaxSize(),
-                              containerColor = Color.Transparent
-                          ) { innerPadding ->
-                              ClockScreen(
-                                  viewModel = clockViewModel,
-                                  modifier = Modifier.padding(innerPadding)
+                              containerColor =
+                                  Color.Transparent
+                          ) { padding ->
+
+                              ClockAppScreen(
+                                  viewModel = viewModel,
+                                  modifier =
+                                      Modifier.padding(
+                                          padding
+                                      )
                               )
                           }
                       }
                   }
               }
           }
+
+          @Composable
+          fun ClockAppScreen(
+              viewModel: ClockViewModel,
+              modifier: Modifier = Modifier
+          ) {
+
+              val state by
+                  viewModel.uiState.collectAsState()
+
+              Column(
+                  modifier =
+                      modifier
+                          .fillMaxSize()
+                          .background(
+                              Brush.verticalGradient(
+                                  listOf(
+                                      Color(0xFF05070A),
+                                      Color(0xFF111827),
+                                      Color(0xFF030712)
+                                  )
+                              )
+                          )
+                          .padding(16.dp),
+
+                  horizontalAlignment =
+                      Alignment.CenterHorizontally,
+
+                  verticalArrangement =
+                      Arrangement.SpaceBetween
+              ) {
+
+                  Text(
+                      text =
+                          "3D PREMIUM CLOCK",
+                      color = Color.White,
+                      fontSize = 20.sp,
+                      fontWeight =
+                          FontWeight.ExtraBold
+                  )
+
+                  Spacer(
+                      modifier =
+                          Modifier.height(8.dp)
+                  )
+
+                  ClockPreview(
+                      state = state
+                  )
+
+                  Spacer(
+                      modifier =
+                          Modifier.height(8.dp)
+                  )
+
+                  Row(
+                      modifier =
+                          Modifier
+                              .fillMaxWidth()
+                              .horizontalScroll(
+                                  rememberScrollState()
+                              ),
+
+                      horizontalArrangement =
+                          Arrangement.spacedBy(8.dp)
+                  ) {
+
+                      ClockFaceType.values()
+                          .forEach { face ->
+
+                              FilterChip(
+                                  selected =
+                                      state.selectedFace ==
+                                          face,
+
+                                  onClick = {
+                                      viewModel
+                                          .selectFace(
+                                              face
+                                          )
+                                  },
+
+                                  label = {
+                                      Text(
+                                          face.title
+                                      )
+                                  }
+                              )
+                          }
+                  }
+
+                  Spacer(
+                      modifier =
+                          Modifier.height(8.dp)
+                  )
+
+                  Row(
+                      modifier =
+                          Modifier.fillMaxWidth(),
+
+                      verticalAlignment =
+                          Alignment.CenterVertically,
+
+                      horizontalArrangement =
+                          Arrangement.SpaceBetween
+                  ) {
+
+                      Text(
+                          "24-Hour Format",
+                          color = Color.White
+                      )
+
+                      Switch(
+                          checked =
+                              state.is24HourFormat,
+
+                          onCheckedChange = {
+                              viewModel
+                                  .set24HourFormat(
+                                      it
+                                  )
+                          }
+                      )
+                  }
+
+                  Spacer(
+                      modifier =
+                          Modifier.height(8.dp)
+                  )
+
+                  Row(
+                      modifier =
+                          Modifier.fillMaxWidth(),
+
+                      verticalAlignment =
+                          Alignment.CenterVertically
+                  ) {
+
+                      Text(
+                          "Time Colour",
+                          color = Color.White
+                      )
+
+                      Spacer(
+                          Modifier.width(16.dp)
+                      )
+
+                      DigitalAccentColor.values()
+                          .forEach { option ->
+
+                              val selected =
+                                  state.digitalColor ==
+                                      option
+
+                              Box(
+                                  modifier =
+                                      Modifier
+                                          .padding(
+                                              horizontal =
+                                                  5.dp
+                                          )
+                                          .size(32.dp)
+                                          .clip(
+                                              CircleShape
+                                          )
+                                          .background(
+                                              Color(
+                                                  option.argb
+                                              )
+                                          )
+                                          .clickable {
+                                              viewModel
+                                                  .selectDigitalColor(
+                                                      option
+                                                  )
+                                          }
+                              )
+                          }
+                  }
+              }
+          }
+
+          @Composable
+          fun ClockPreview(
+              state:
+                  com.example.clock.ClockUiState
+          ) {
+
+              val accent =
+                  Color(
+                      state.digitalColor.argb
+                  )
+
+              val time =
+                  formatTime(
+                      state.hour,
+                      state.minute,
+                      state.is24HourFormat
+                  )
+
+              Box(
+                  modifier =
+                      Modifier
+                          .size(300.dp)
+                          .clip(
+                              RoundedCornerShape(
+                                  36.dp
+                              )
+                          )
+                          .background(
+                              Brush.radialGradient(
+                                  listOf(
+                                      Color(0xFF273449),
+                                      Color(0xFF070B12)
+                                  )
+                              )
+                          ),
+
+                  contentAlignment =
+                      Alignment.Center
+              ) {
+
+                  if (state.selectedFace.isDigital) {
+
+                      Column(
+                          horizontalAlignment =
+                              Alignment.CenterHorizontally
+                      ) {
+
+                          Text(
+                              text = time,
+                              color = accent,
+                              fontSize = 46.sp,
+                              fontWeight =
+                                  FontWeight.Black
+                          )
+
+                          Text(
+                              text =
+                                  state.dateText,
+                              color =
+                                  Color.White.copy(
+                                      alpha = 0.9f
+                                  ),
+                              fontSize = 13.sp,
+                              fontWeight =
+                                  FontWeight.Bold
+                          )
+                      }
+
+                  } else {
+
+                      Column(
+                          horizontalAlignment =
+                              Alignment.CenterHorizontally
+                      ) {
+
+                          Text(
+                              text =
+                                  state.selectedFace.title,
+                              color =
+                                  Color.White,
+                              fontSize = 15.sp,
+                              fontWeight =
+                                  FontWeight.Bold
+                          )
+
+                          Spacer(
+                              Modifier.height(8.dp)
+                          )
+
+                          Text(
+                              text = time,
+                              color = accent,
+                              fontSize = 34.sp,
+                              fontWeight =
+                                  FontWeight.Black
+                          )
+
+                          Text(
+                              text =
+                                  state.dateText,
+                              color =
+                                  Color.White,
+                              fontSize = 12.sp
+                          )
+                      }
+                  }
+              }
+          }
+
+          fun formatTime(
+              hour24: Int,
+              minute: Int,
+              is24Hour: Boolean
+          ): String {
+
+              if (is24Hour) {
+
+                  return String.format(
+                      Locale.getDefault(),
+                      "%02d:%02d",
+                      hour24,
+                      minute
+                  )
+              }
+
+              val hour12 =
+                  when {
+
+                      hour24 == 0 -> 12
+
+                      hour24 > 12 ->
+                          hour24 - 12
+
+                      else ->
+                          hour24
+                  }
+
+              val ampm =
+                  if (hour24 >= 12)
+                      "PM"
+                  else
+                      "AM"
+
+              return String.format(
+                  Locale.getDefault(),
+                  "%d:%02d %s",
+                  hour12,
+                  minute,
+                  ampm
+              )
+          }
           EOF
 
-          cat <<'EOF' > "$JAVA_DIR/widget/ClockWidgetProvider.kt"
+          # ------------------------------------------------------------
+          # WIDGET PROVIDER
+          # ------------------------------------------------------------
+
+          cat > "$JAVA_DIR/widget/ClockWidgetProvider.kt" <<'EOF'
           package com.example.widget
 
           import android.app.PendingIntent
@@ -597,118 +766,479 @@ jobs:
           import com.example.MainActivity
           import com.example.clock.ClockFaceType
           import com.example.clock.DigitalAccentColor
-          import com.example.ui.formatDigitalTime
           import java.text.SimpleDateFormat
           import java.util.Calendar
           import java.util.Locale
 
-          class ClockWidgetProvider : AppWidgetProvider() {
+          class ClockWidgetProvider :
+              AppWidgetProvider() {
 
               override fun onUpdate(
                   context: Context,
-                  appWidgetManager: AppWidgetManager,
-                  appWidgetIds: IntArray
+                  manager: AppWidgetManager,
+                  ids: IntArray
               ) {
-                  for (appWidgetId in appWidgetIds) {
-                      updateSingleWidget(context, appWidgetManager, appWidgetId)
+
+                  ids.forEach { id ->
+                      updateWidget(
+                          context,
+                          manager,
+                          id
+                      )
                   }
               }
 
               companion object {
-                  fun refreshAllWidgets(context: Context) {
-                      val manager = AppWidgetManager.getInstance(context)
-                      val component = ComponentName(context, ClockWidgetProvider::class.java)
-                      val ids = manager.getAppWidgetIds(component)
-                      if (ids.isNotEmpty()) {
-                          for (id in ids) {
-                              updateSingleWidget(context, manager, id)
-                          }
+
+                  fun refreshAllWidgets(
+                      context: Context
+                  ) {
+
+                      val manager =
+                          AppWidgetManager
+                              .getInstance(
+                                  context
+                              )
+
+                      val component =
+                          ComponentName(
+                              context,
+                              ClockWidgetProvider::class.java
+                          )
+
+                      val ids =
+                          manager.getAppWidgetIds(
+                              component
+                          )
+
+                      ids.forEach { id ->
+                          updateWidget(
+                              context,
+                              manager,
+                              id
+                          )
                       }
                   }
 
-                  private fun updateSingleWidget(
+                  private fun updateWidget(
                       context: Context,
-                      appWidgetManager: AppWidgetManager,
-                      appWidgetId: Int
+                      manager:
+                          AppWidgetManager,
+                      widgetId: Int
                   ) {
-                      val prefs = context.getSharedPreferences("clock_prefs", Context.MODE_PRIVATE)
-                      val faceName = prefs.getString("selected_face", ClockFaceType.OBSIDIAN_ANALOG.name)
-                      val face = runCatching { ClockFaceType.valueOf(faceName!!) }
-                          .getOrDefault(ClockFaceType.OBSIDIAN_ANALOG)
 
-                      val colorName = prefs.getString("digital_color", DigitalAccentColor.CYAN.name)
-                      val colorOption = runCatching { DigitalAccentColor.valueOf(colorName!!) }
-                          .getOrDefault(DigitalAccentColor.CYAN)
+                      val prefs =
+                          context.getSharedPreferences(
+                              "clock_prefs",
+                              Context.MODE_PRIVATE
+                          )
 
-                      val is24h = prefs.getBoolean("is_24_hour", false)
+                      val faceName =
+                          prefs.getString(
+                              "selected_face",
+                              ClockFaceType
+                                  .OBSIDIAN_ANALOG
+                                  .name
+                          )
 
-                      val cal = Calendar.getInstance()
-                      val hour24 = cal.get(Calendar.HOUR_OF_DAY)
-                      val minute = cal.get(Calendar.MINUTE)
-                      val timeStr = formatDigitalTime(hour24, minute, is24h)
-                      val dateStr = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
-                          .format(cal.time)
-                          .uppercase(Locale.getDefault())
+                      val face =
+                          runCatching {
+                              ClockFaceType.valueOf(
+                                  faceName ?: ""
+                              )
+                          }.getOrDefault(
+                              ClockFaceType
+                                  .OBSIDIAN_ANALOG
+                          )
 
-                      val packageName = context.packageName
-                      val layoutId = context.resources.getIdentifier("widget_clock", "layout", packageName)
-                      val rootId = context.resources.getIdentifier("widget_root", "id", packageName)
-                      val faceLabelId = context.resources.getIdentifier("widget_face_label", "id", packageName)
-                      val timeTextId = context.resources.getIdentifier("widget_time_text", "id", packageName)
-                      val dateTextId = context.resources.getIdentifier("widget_date_text", "id", packageName)
+                      val colorName =
+                          prefs.getString(
+                              "digital_color",
+                              DigitalAccentColor
+                                  .CYAN
+                                  .name
+                          )
 
-                      val views = RemoteViews(packageName, layoutId)
-                      views.setTextViewText(faceLabelId, face.title)
-                      views.setTextViewText(timeTextId, timeStr)
-                      views.setTextViewText(dateTextId, dateStr)
+                      val color =
+                          runCatching {
+                              DigitalAccentColor.valueOf(
+                                  colorName ?: ""
+                              )
+                          }.getOrDefault(
+                              DigitalAccentColor
+                                  .CYAN
+                          )
 
-                      val accentInt = when (face) {
-                          ClockFaceType.GLASS_NEON_DIGITAL,
-                          ClockFaceType.SCULPTED_DIGITAL,
-                          ClockFaceType.AURORA_HYBRID -> colorOption.argb.toInt()
-                          ClockFaceType.OBSIDIAN_ANALOG -> 0xFF38BDF8.toInt()
-                          ClockFaceType.CHROME_ANALOG -> 0xFFF43F5E.toInt()
-                      }
-                      views.setTextColor(timeTextId, accentInt)
+                      val is24 =
+                          prefs.getBoolean(
+                              "is_24_hour",
+                              false
+                          )
 
-                      val launchIntent = Intent(context, MainActivity::class.java)
-                      val pendingIntent = PendingIntent.getActivity(
-                          context,
-                          appWidgetId,
-                          launchIntent,
-                          PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                      val calendar =
+                          Calendar.getInstance()
+
+                      val hour =
+                          calendar.get(
+                              Calendar.HOUR_OF_DAY
+                          )
+
+                      val minute =
+                          calendar.get(
+                              Calendar.MINUTE
+                          )
+
+                      val second =
+                          calendar.get(
+                              Calendar.SECOND
+                          )
+
+                      val time =
+                          if (is24) {
+
+                              String.format(
+                                  Locale.getDefault(),
+                                  "%02d:%02d",
+                                  hour,
+                                  minute
+                              )
+
+                          } else {
+
+                              val h =
+                                  when {
+                                      hour == 0 -> 12
+                                      hour > 12 ->
+                                          hour - 12
+                                      else -> hour
+                                  }
+
+                              val ap =
+                                  if (hour >= 12)
+                                      "PM"
+                                  else
+                                      "AM"
+
+                              String.format(
+                                  Locale.getDefault(),
+                                  "%d:%02d %s",
+                                  h,
+                                  minute,
+                                  ap
+                              )
+                          }
+
+                      val date =
+                          SimpleDateFormat(
+                              "EEE, MMM d",
+                              Locale.getDefault()
+                          )
+                              .format(
+                                  calendar.time
+                              )
+                              .uppercase(
+                                  Locale.getDefault()
+                              )
+
+                      val layout =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_clock",
+                                  "layout",
+                                  context.packageName
+                              )
+
+                      val root =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_root",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val label =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_face_label",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val timeId =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_time_text",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val dateId =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_date_text",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val left =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_left",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val right =
+                          context.resources
+                              .getIdentifier(
+                                  "widget_right",
+                                  "id",
+                                  context.packageName
+                              )
+
+                      val views =
+                          RemoteViews(
+                              context.packageName,
+                              layout
+                          )
+
+                      views.setTextViewText(
+                          label,
+                          face.title
                       )
-                      views.setOnClickPendingIntent(rootId, pendingIntent)
 
-                      appWidgetManager.updateAppWidget(appWidgetId, views)
+                      views.setTextViewText(
+                          timeId,
+                          time
+                      )
+
+                      views.setTextViewText(
+                          dateId,
+                          date
+                      )
+
+                      views.setTextColor(
+                          timeId,
+                          color.argb.toInt()
+                      )
+
+                      # Face-specific 3D appearance
+                      val background =
+                          when (face) {
+
+                              ClockFaceType
+                                  .OBSIDIAN_ANALOG ->
+                                  "widget_bg_obsidian"
+
+                              ClockFaceType
+                                  .CHROME_ANALOG ->
+                                  "widget_bg_chrome"
+
+                              ClockFaceType
+                                  .GLASS_NEON_DIGITAL ->
+                                  "widget_bg_glass"
+
+                              ClockFaceType
+                                  .SCULPTED_DIGITAL ->
+                                  "widget_bg_sculpted"
+
+                              ClockFaceType
+                                  .AURORA_HYBRID ->
+                                  "widget_bg_aurora"
+                          }
+
+                      val backgroundId =
+                          context.resources
+                              .getIdentifier(
+                                  background,
+                                  "drawable",
+                                  context.packageName
+                              )
+
+                      views.setInt(
+                          root,
+                          "setBackgroundResource",
+                          backgroundId
+                      )
+
+                      # Previous face
+                      val leftIntent =
+                          Intent(
+                              context,
+                              ClockWidgetProvider::class.java
+                          ).apply {
+                              action =
+                                  "CLOCK_PREVIOUS_FACE"
+                              putExtra(
+                                  AppWidgetManager
+                                      .EXTRA_APPWIDGET_ID,
+                                  widgetId
+                              )
+                          }
+
+                      # Next face
+                      val rightIntent =
+                          Intent(
+                              context,
+                              ClockWidgetProvider::class.java
+                          ).apply {
+                              action =
+                                  "CLOCK_NEXT_FACE"
+                              putExtra(
+                                  AppWidgetManager
+                                      .EXTRA_APPWIDGET_ID,
+                                  widgetId
+                              )
+                          }
+
+                      val leftPending =
+                          PendingIntent.getBroadcast(
+                              context,
+                              widgetId * 10 + 1,
+                              leftIntent,
+                              PendingIntent.FLAG_UPDATE_CURRENT or
+                                  PendingIntent.FLAG_IMMUTABLE
+                          )
+
+                      val rightPending =
+                          PendingIntent.getBroadcast(
+                              context,
+                              widgetId * 10 + 2,
+                              rightIntent,
+                              PendingIntent.FLAG_UPDATE_CURRENT or
+                                  PendingIntent.FLAG_IMMUTABLE
+                          )
+
+                      views.setOnClickPendingIntent(
+                          left,
+                          leftPending
+                      )
+
+                      views.setOnClickPendingIntent(
+                          right,
+                          rightPending
+                      )
+
+                      val launchIntent =
+                          Intent(
+                              context,
+                              MainActivity::class.java
+                          )
+
+                      val launchPending =
+                          PendingIntent.getActivity(
+                              context,
+                              widgetId,
+                              launchIntent,
+                              PendingIntent.FLAG_UPDATE_CURRENT or
+                                  PendingIntent.FLAG_IMMUTABLE
+                          )
+
+                      views.setOnClickPendingIntent(
+                          root,
+                          launchPending
+                      )
+
+                      manager.updateAppWidget(
+                          widgetId,
+                          views
+                      )
+                  }
+              }
+
+              override fun onReceive(
+                  context: Context,
+                  intent: Intent
+              ) {
+
+                  super.onReceive(
+                      context,
+                      intent
+                  )
+
+                  if (
+                      intent.action ==
+                          "CLOCK_NEXT_FACE" ||
+                      intent.action ==
+                          "CLOCK_PREVIOUS_FACE"
+                  ) {
+
+                      val prefs =
+                          context.getSharedPreferences(
+                              "clock_prefs",
+                              Context.MODE_PRIVATE
+                          )
+
+                      val currentName =
+                          prefs.getString(
+                              "selected_face",
+                              ClockFaceType
+                                  .OBSIDIAN_ANALOG
+                                  .name
+                          )
+
+                      val current =
+                          runCatching {
+                              ClockFaceType.valueOf(
+                                  currentName ?: ""
+                              )
+                          }.getOrDefault(
+                              ClockFaceType
+                                  .OBSIDIAN_ANALOG
+                          )
+
+                      val faces =
+                          ClockFaceType.values()
+
+                      var index =
+                          faces.indexOf(current)
+
+                      if (
+                          intent.action ==
+                              "CLOCK_NEXT_FACE"
+                      ) {
+                          index =
+                              (index + 1) %
+                                  faces.size
+                      } else {
+                          index =
+                              (index - 1 +
+                                  faces.size) %
+                                  faces.size
+                      }
+
+                      prefs.edit()
+                          .putString(
+                              "selected_face",
+                              faces[index].name
+                          )
+                          .apply()
+
+                      refreshAllWidgets(
+                          context
+                      )
                   }
               }
           }
           EOF
 
-          cat <<'EOF' > "$BASE/res/drawable/widget_background.xml"
-          <?xml version="1.0" encoding="utf-8"?>
-          <shape xmlns:android="http://schemas.android.com/apk/res/android"
-              android:shape="rectangle">
-              <solid android:color="@android:color/transparent" />
-              <corners android:radius="24dp" />
-          </shape>
-          EOF
+          # ------------------------------------------------------------
+          # WIDGET LAYOUT
+          # ------------------------------------------------------------
 
-          cat <<'EOF' > "$BASE/res/layout/widget_clock.xml"
+          cat > "$BASE/res/layout/widget_clock.xml" <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
-          <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+          <FrameLayout
+              xmlns:android="http://schemas.android.com/apk/res/android"
               android:id="@+id/widget_root"
               android:layout_width="match_parent"
               android:layout_height="match_parent"
-              android:background="@drawable/widget_background"
-              android:padding="12dp">
+              android:padding="8dp">
 
               <LinearLayout
-                  android:id="@+id/widget_panel"
                   android:layout_width="match_parent"
                   android:layout_height="match_parent"
-                  android:background="@android:color/transparent"
                   android:gravity="center"
                   android:orientation="vertical">
 
@@ -716,27 +1246,23 @@ jobs:
                       android:id="@+id/widget_face_label"
                       android:layout_width="wrap_content"
                       android:layout_height="wrap_content"
-                      android:shadowColor="#B3000000"
-                      android:shadowDx="1.5"
-                      android:shadowDy="2.5"
-                      android:shadowRadius="3"
                       android:text="3D Obsidian Analog"
                       android:textColor="#FFFFFF"
-                      android:textSize="11sp"
+                      android:textSize="10sp"
                       android:textStyle="bold" />
 
                   <TextView
                       android:id="@+id/widget_time_text"
                       android:layout_width="wrap_content"
                       android:layout_height="wrap_content"
-                      android:layout_marginTop="2dp"
-                      android:shadowColor="#CC000000"
+                      android:layout_marginTop="3dp"
+                      android:shadowColor="#AA000000"
                       android:shadowDx="2"
-                      android:shadowDy="4"
+                      android:shadowDy="3"
                       android:shadowRadius="4"
                       android:text="10:10 AM"
                       android:textColor="#00E5FF"
-                      android:textSize="28sp"
+                      android:textSize="29sp"
                       android:textStyle="bold" />
 
                   <TextView
@@ -744,35 +1270,192 @@ jobs:
                       android:layout_width="wrap_content"
                       android:layout_height="wrap_content"
                       android:layout_marginTop="2dp"
-                      android:shadowColor="#B3000000"
-                      android:shadowDx="1.5"
-                      android:shadowDy="2"
-                      android:shadowRadius="3"
                       android:text="SAT, NOV 28"
-                      android:textColor="#F8FAFC"
-                      android:textSize="12sp"
+                      android:textColor="#FFFFFF"
+                      android:textSize="11sp"
                       android:textStyle="bold" />
+
               </LinearLayout>
+
+              <TextView
+                  android:id="@+id/widget_left"
+                  android:layout_width="42dp"
+                  android:layout_height="42dp"
+                  android:layout_gravity="center_vertical|start"
+                  android:gravity="center"
+                  android:text="‹"
+                  android:textColor="#FFFFFF"
+                  android:textSize="30sp"
+                  android:textStyle="bold" />
+
+              <TextView
+                  android:id="@+id/widget_right"
+                  android:layout_width="42dp"
+                  android:layout_height="42dp"
+                  android:layout_gravity="center_vertical|end"
+                  android:gravity="center"
+                  android:text="›"
+                  android:textColor="#FFFFFF"
+                  android:textSize="30sp"
+                  android:textStyle="bold" />
+
           </FrameLayout>
           EOF
 
-          cp "$BASE/res/layout/widget_clock.xml" "$BASE/res/layout-v26/widget_clock.xml"
+          # ------------------------------------------------------------
+          # 5 DIFFERENT 3D BACKGROUNDS
+          # ------------------------------------------------------------
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+          cat > "$BASE/res/drawable/widget_bg_obsidian.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="135"
+                  android:startColor="#663A414A"
+                  android:centerColor="#33151A21"
+                  android:endColor="#11000000" />
+              <corners android:radius="28dp" />
+              <stroke
+                  android:width="2dp"
+                  android:color="#6638BDF8" />
+          </shape>
+          EOF
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+          cat > "$BASE/res/drawable/widget_bg_chrome.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="135"
+                  android:startColor="#99E2E8F0"
+                  android:centerColor="#445B6470"
+                  android:endColor="#11000000" />
+              <corners android:radius="28dp" />
+              <stroke
+                  android:width="2dp"
+                  android:color="#66FFFFFF" />
+          </shape>
+          EOF
+
+          cat > "$BASE/res/drawable/widget_bg_glass.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="135"
+                  android:startColor="#5520E0FF"
+                  android:centerColor="#331E293B"
+                  android:endColor="#11000000" />
+              <corners android:radius="28dp" />
+              <stroke
+                  android:width="2dp"
+                  android:color="#6600E5FF" />
+          </shape>
+          EOF
+
+          cat > "$BASE/res/drawable/widget_bg_sculpted.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="135"
+                  android:startColor="#66404046"
+                  android:centerColor="#3318181B"
+                  android:endColor="#11000000" />
+              <corners android:radius="28dp" />
+              <stroke
+                  android:width="2dp"
+                  android:color="#66FFFFFF" />
+          </shape>
+          EOF
+
+          cat > "$BASE/res/drawable/widget_bg_aurora.xml" <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <gradient
+                  android:angle="135"
+                  android:startColor="#6634D399"
+                  android:centerColor="#4438BDF8"
+                  android:endColor="#331C0F3A" />
+              <corners android:radius="28dp" />
+              <stroke
+                  android:width="2dp"
+                  android:color="#667C3AED" />
+          </shape>
+          EOF
+
+      - name: Add widget receiver to AndroidManifest
+        shell: bash
+        run: |
+          set -e
+
+          MANIFEST="ClockApp_Full/app/src/main/AndroidManifest.xml"
+
+          if [ ! -f "$MANIFEST" ]; then
+            echo "ERROR: AndroidManifest.xml not found."
+            exit 1
+          fi
+
+          if ! grep -q "ClockWidgetProvider" "$MANIFEST"; then
+
+            python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path("ClockApp_Full/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+
+          receiver = '''
+                  <receiver
+                      android:name=".widget.ClockWidgetProvider"
+                      android:exported="false">
+                      <intent-filter>
+                          <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                          <action android:name="CLOCK_NEXT_FACE" />
+                          <action android:name="CLOCK_PREVIOUS_FACE" />
+                      </intent-filter>
+
+                      <meta-data
+                          android:name="android.appwidget.provider"
+                          android:resource="@xml/clock_widget_info" />
+                  </receiver>
+          '''
+
+          if "</application>" in s:
+              s = s.replace("</application>", receiver + "\n    </application>")
+              p.write_text(s)
+          else:
+              raise SystemExit("No application tag found")
+          PY
+
+          fi
+
+      - name: Create widget provider info
+        shell: bash
+        run: |
+          set -e
+
+          mkdir -p ClockApp_Full/app/src/main/res/xml
+
+          cat > ClockApp_Full/app/src/main/res/xml/clock_widget_info.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <appwidget-provider
+              xmlns:android="http://schemas.android.com/apk/res/android"
+              android:minWidth="180dp"
+              android:minHeight="110dp"
+              android:updatePeriodMillis="60000"
+              android:initialLayout="@layout/widget_clock"
+              android:resizeMode="horizontal|vertical"
+              android:widgetCategory="home_screen"
+              android:previewImage="@drawable/widget_bg_obsidian" />
+          EOF
 
       - name: Build Debug APK
         working-directory: ClockApp_Full
-        run: gradle assembleDebug --stacktrace
+        shell: bash
+        run: |
+          set -e
+          gradle assembleDebug --stacktrace
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: ClockApp-Debug-APK
           path: ClockApp_Full/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
